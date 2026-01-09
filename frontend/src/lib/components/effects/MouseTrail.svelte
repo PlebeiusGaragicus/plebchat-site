@@ -2,129 +2,66 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
 
-	interface Particle {
-		x: number;
-		y: number;
-		vx: number;
-		vy: number;
-		life: number;
-		maxLife: number;
-		size: number;
-		color: string;
-	}
-
-	let canvas: HTMLCanvasElement;
-	let ctx: CanvasRenderingContext2D | null;
-	let particles: Particle[] = [];
-	let animationId: number;
+	let glowElement: HTMLDivElement;
 	let mouseX = 0;
 	let mouseY = 0;
-	let lastMouseX = 0;
-	let lastMouseY = 0;
+	let currentX = 0;
+	let currentY = 0;
+	let animationId: number;
 
-	const colors = [
-		'rgba(0, 212, 255, 0.6)',   // cyan
-		'rgba(139, 92, 246, 0.5)',  // purple
-		'rgba(0, 212, 255, 0.4)',   // cyan dim
-	];
-
-	function createParticle(x: number, y: number, vx: number, vy: number): Particle {
-		return {
-			x,
-			y,
-			vx: vx * 0.3 + (Math.random() - 0.5) * 2,
-			vy: vy * 0.3 + (Math.random() - 0.5) * 2,
-			life: 1,
-			maxLife: 30 + Math.random() * 20,
-			size: 1 + Math.random() * 2,
-			color: colors[Math.floor(Math.random() * colors.length)]
-		};
-	}
-
-	function updateParticles() {
-		particles = particles.filter(p => {
-			p.x += p.vx;
-			p.y += p.vy;
-			p.vx *= 0.98;
-			p.vy *= 0.98;
-			p.life -= 1 / p.maxLife;
-			return p.life > 0;
-		});
-	}
-
-	function drawParticles() {
-		if (!ctx || !canvas) return;
-		
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
-		
-		for (const p of particles) {
-			ctx.beginPath();
-			ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-			ctx.fillStyle = p.color.replace(/[\d.]+\)$/, `${p.life * 0.6})`);
-			ctx.fill();
-		}
-	}
+	// Smoothing factor (lower = smoother/slower, higher = snappier)
+	const smoothing = 0.08;
 
 	function animate() {
-		updateParticles();
-		drawParticles();
+		// Smooth interpolation towards mouse position
+		currentX += (mouseX - currentX) * smoothing;
+		currentY += (mouseY - currentY) * smoothing;
+
+		if (glowElement) {
+			glowElement.style.left = `${currentX}px`;
+			glowElement.style.top = `${currentY}px`;
+		}
+
 		animationId = requestAnimationFrame(animate);
 	}
 
 	function handleMouseMove(e: MouseEvent) {
 		mouseX = e.clientX;
 		mouseY = e.clientY;
-		
-		const dx = mouseX - lastMouseX;
-		const dy = mouseY - lastMouseY;
-		const speed = Math.sqrt(dx * dx + dy * dy);
-		
-		// Only create particles when mouse is moving
-		if (speed > 2) {
-			const particleCount = Math.min(Math.floor(speed / 8), 3);
-			for (let i = 0; i < particleCount; i++) {
-				particles.push(createParticle(mouseX, mouseY, dx, dy));
-			}
-		}
-		
-		lastMouseX = mouseX;
-		lastMouseY = mouseY;
-		
-		// Limit particle count
-		if (particles.length > 100) {
-			particles = particles.slice(-100);
-		}
-	}
-
-	function handleResize() {
-		if (!canvas) return;
-		canvas.width = window.innerWidth;
-		canvas.height = window.innerHeight;
 	}
 
 	onMount(() => {
 		if (!browser) return;
-		
-		ctx = canvas.getContext('2d');
-		handleResize();
-		
+
+		// Initialize position
+		currentX = window.innerWidth / 2;
+		currentY = window.innerHeight / 2;
+		mouseX = currentX;
+		mouseY = currentY;
+
 		window.addEventListener('mousemove', handleMouseMove);
-		window.addEventListener('resize', handleResize);
-		
 		animate();
 	});
 
 	onDestroy(() => {
 		if (!browser) return;
-		
 		window.removeEventListener('mousemove', handleMouseMove);
-		window.removeEventListener('resize', handleResize);
 		cancelAnimationFrame(animationId);
 	});
 </script>
 
-<canvas 
-	bind:this={canvas} 
-	id="mouse-trail-canvas"
-	class="pointer-events-none fixed inset-0 z-[9999] opacity-60"
-></canvas>
+<div
+	bind:this={glowElement}
+	class="pointer-events-none fixed z-0 -translate-x-1/2 -translate-y-1/2"
+	style="
+		width: 600px;
+		height: 600px;
+		background: radial-gradient(
+			circle,
+			rgba(0, 212, 255, 0.08) 0%,
+			rgba(139, 92, 246, 0.04) 30%,
+			transparent 70%
+		);
+		filter: blur(60px);
+	"
+></div>

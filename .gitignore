@@ -10,5 +10,7 @@ reference/
 
 .DS_Store
 .env
+*.sqlite3
+*.jsonl
 
 traces/*

@@ -19,6 +19,8 @@ export {
 	getStreamState, 
 	isStreaming, 
 	getStreamError,
+	TESTING_MODE,
+	TESTING_MODE_COST,
 	type PaymentInfo,
 	type SendMessageOptions
 } from './stores/stream.svelte.js';

@@ -36,5 +36,5 @@
 	<WelcomePage />
 {:else}
 	<ThreadSidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
-	<ChatContainer {sidebarOpen} />
+	<ChatContainer />
 {/if}

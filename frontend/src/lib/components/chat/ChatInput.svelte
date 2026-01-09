@@ -3,6 +3,7 @@
 	import { Send, Settings, Loader2 } from '@lucide/svelte';
 	import { selectedAgent } from '$lib/stores/agent.js';
 	import { currentThread } from '$lib/stores/threads.js';
+	import { TESTING_MODE, TESTING_MODE_COST } from '$lib/stores/stream.svelte.js';
 
 	interface Props {
 		onSubmit: (message: string) => void;
@@ -37,12 +38,13 @@
 	function autoResize() {
 		if (!textareaRef) return;
 		textareaRef.style.height = 'auto';
-		textareaRef.style.height = Math.min(textareaRef.scrollHeight, 200) + 'px';
+		textareaRef.style.height = Math.min(textareaRef.scrollHeight, 150) + 'px';
 	}
 
 	// Calculate cost for current prompt
 	let promptCost = $derived.by(() => {
 		if (!$selectedAgent) return 0;
+		if (TESTING_MODE) return TESTING_MODE_COST;
 		const thread = $currentThread;
 		if (!thread || thread.promptCount === 0) {
 			return $selectedAgent.initialCost;
@@ -52,38 +54,41 @@
 </script>
 
 <form onsubmit={handleSubmit} class="relative">
-	<div class="glow-input p-1">
-		<div class="flex items-end gap-2">
+	<!-- Input container -->
+	<div class="glow-input rounded-full sm:rounded-[2rem] p-1 sm:p-1.5 overflow-hidden">
+		<div class="flex items-end gap-1 sm:gap-2">
+			<!-- Text input area -->
 			<textarea
 				bind:this={textareaRef}
 				bind:value={message}
 				onkeydown={handleKeyDown}
 				oninput={autoResize}
-				placeholder={$selectedAgent ? "Ask me anything..." : "Select an agent to start chatting"}
+				placeholder={$selectedAgent ? "Ask me anything..." : "Select an agent first"}
 				disabled={disabled || !$selectedAgent}
 				rows={1}
 				class={cn(
-					"flex-1 resize-none bg-transparent px-4 py-3 text-[var(--color-text-primary)]",
+					"flex-1 resize-none bg-transparent px-3 sm:px-5 py-3 sm:py-4 text-sm sm:text-base text-[var(--color-text-primary)]",
 					"placeholder:text-[var(--color-text-muted)]",
 					"focus:outline-none focus:ring-0",
 					"disabled:opacity-50 disabled:cursor-not-allowed",
-					"max-h-[200px] min-h-[48px]"
+					"max-h-[150px] min-h-[48px] sm:min-h-[56px]"
 				)}
 			></textarea>
 
-			<div class="flex items-center gap-1 pb-2 pr-2">
-				<!-- Settings button -->
+			<!-- Action buttons -->
+			<div class="flex items-center gap-1 pb-2 sm:pb-3 pr-2 sm:pr-3 flex-shrink-0">
+				<!-- Settings button - hidden on mobile -->
 				<button
 					type="button"
 					onclick={() => showSettings = !showSettings}
 					class={cn(
-						"p-2 rounded-lg transition-colors",
+						"hidden sm:flex p-2 rounded-full transition-colors",
 						"text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]",
 						"hover:bg-[var(--color-bg-elevated)]"
 					)}
 					title="Agent settings"
 				>
-					<Settings class="w-5 h-5" />
+					<Settings class="w-4 h-4 sm:w-5 sm:h-5" />
 				</button>
 
 				<!-- Send button -->
@@ -91,7 +96,7 @@
 					type="submit"
 					disabled={!message.trim() || isLoading || disabled || !$selectedAgent}
 					class={cn(
-						"p-2 rounded-lg transition-all",
+						"p-2 sm:p-3 rounded-full transition-all",
 						"bg-gradient-to-r from-[var(--color-cyan-glow)] to-[var(--color-cyan-dim)]",
 						"text-[var(--color-bg-primary)] font-medium",
 						"hover:shadow-[var(--shadow-glow-sm)]",
@@ -99,9 +104,9 @@
 					)}
 				>
 					{#if isLoading}
-						<Loader2 class="w-5 h-5 animate-spin" />
+						<Loader2 class="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
 					{:else}
-						<Send class="w-5 h-5" />
+						<Send class="w-4 h-4 sm:w-5 sm:h-5" />
 					{/if}
 				</button>
 			</div>
@@ -110,25 +115,25 @@
 
 	<!-- Cost indicator -->
 	{#if $selectedAgent && message.trim()}
-		<div class="absolute -top-8 right-0 text-xs text-[var(--color-text-muted)]">
+		<div class="absolute -top-6 sm:-top-8 right-2 sm:right-0 text-[10px] sm:text-xs text-[var(--color-text-muted)]">
 			<span class="text-[var(--color-cyan-glow)]">{promptCost}</span> sats
 		</div>
 	{/if}
 </form>
 
-<!-- Settings Modal (placeholder for now) -->
+<!-- Settings Modal -->
 {#if showSettings}
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 	<div 
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" 
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" 
 		onclick={() => showSettings = false}
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="settings-title"
 	>
 		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div class="bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] rounded-xl p-6 max-w-md w-full mx-4" onclick={(e) => e.stopPropagation()}>
-			<h3 id="settings-title" class="text-lg font-semibold text-[var(--color-text-primary)] mb-4">Agent Settings</h3>
+		<div class="bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] rounded-xl p-4 sm:p-6 max-w-md w-full" onclick={(e) => e.stopPropagation()}>
+			<h3 id="settings-title" class="text-base sm:text-lg font-semibold text-[var(--color-text-primary)] mb-4">Agent Settings</h3>
 			<p class="text-[var(--color-text-secondary)] text-sm mb-4">
 				Configure {$selectedAgent?.name} settings for this chat session.
 			</p>

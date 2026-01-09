@@ -21,12 +21,15 @@ classifiers = [
 ]
 
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.30.0",
-    "httpx>=0.27.0",
-    "python-dotenv>=1.0.0",
-    "pydantic>=2.0.0",
-    "pydantic-settings>=2.0.0",
+    "fastapi",
+    "uvicorn[standard]",
+    "python-dotenv",
+    "pydantic",
+    "marshmallow>=3.13,<4.0",
+    "cashu",
+    "bech32",  # For npub/hex conversion in NIP-98 auth
+    "secp256k1",  # For signature verification
+    "loguru",  # Logging
 ]
 
 [project.optional-dependencies]

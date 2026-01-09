@@ -35,7 +35,7 @@
 		bind:this={buttonRef}
 		onclick={() => isOpen = !isOpen}
 		class={cn(
-			"flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all",
+			"flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all select-none",
 			"border border-[var(--color-border-default)]",
 			"hover:border-[var(--color-border-hover)] hover:bg-[var(--color-bg-elevated)]",
 			"text-sm font-medium"

@@ -24,6 +24,7 @@ export interface Thread {
 	updatedAt: number;
 	messages: ThreadMessage[];
 	promptCount: number;
+	langgraphThreadId?: string; // Maps to LangGraph server thread ID
 }
 
 const STORAGE_KEY = 'plebchat-threads';
@@ -54,7 +55,7 @@ function createThreadsStore() {
 	return {
 		subscribe,
 		
-		createThread: (agentId: string, firstMessage?: string): Thread => {
+		createThread: (agentId: string, firstMessage?: string, langgraphThreadId?: string): Thread => {
 			const newThread: Thread = {
 				id: crypto.randomUUID(),
 				agentId,
@@ -62,11 +63,26 @@ function createThreadsStore() {
 				createdAt: Date.now(),
 				updatedAt: Date.now(),
 				messages: [],
-				promptCount: 0
+				promptCount: 0,
+				langgraphThreadId
 			};
 			
 			update(threads => [newThread, ...threads]);
 			return newThread;
+		},
+
+		setLanggraphThreadId: (threadId: string, langgraphThreadId: string) => {
+			update(threads => {
+				return threads.map(thread => {
+					if (thread.id !== threadId) return thread;
+					return { ...thread, langgraphThreadId };
+				});
+			});
+		},
+
+		getLanggraphThreadId: (threadId: string): string | undefined => {
+			const thread = get({ subscribe }).find(t => t.id === threadId);
+			return thread?.langgraphThreadId;
 		},
 
 		addMessage: (threadId: string, message: Omit<ThreadMessage, 'id' | 'timestamp'>) => {

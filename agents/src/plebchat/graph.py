@@ -1,21 +1,22 @@
 """LangGraph agent for PlebChat AI chat assistant.
 
 This is a simple conversational AI agent that:
-1. Validates ecash payment tokens
-2. Processes user messages with an LLM
-3. Redeems payment tokens on successful completion
+1. Validates and REDEEMS ecash payment tokens BEFORE LLM call
+2. Processes user messages with an LLM only after payment confirmed
+3. Returns refund token if redemption fails
 
-Payment flow (validate-then-redeem-on-success):
+Payment flow (redeem-first):
 1. Client sends ecash token with message
-2. validate_payment node checks token format (doesn't redeem yet)
-3. agent node processes the LLM request
-4. On SUCCESS: redeem token to backend wallet
-5. On FAILURE: don't redeem, return refund flag so client can self-recover
+2. validate_payment node checks token format AND redeems it immediately
+3. If redemption fails: STOP, return token for client-side refund
+4. If redemption succeeds: proceed to LLM (we've been paid)
+5. On LLM failure: user loses payment (we already did the work of receiving)
+
+This ensures we NEVER call the LLM without confirmed payment.
 """
 
 from __future__ import annotations
 
-import base64
 import os
 import uuid
 from typing import Annotated, Literal, TypedDict
@@ -56,9 +57,11 @@ class AgentState(TypedDict):
 
     messages: Annotated[list[BaseMessage], add_messages]
     payment: PaymentInfo | None
-    payment_validated: bool  # Token checked but not redeemed
-    payment_token: str | None  # Token to redeem on success
+    payment_validated: bool  # Token validated AND redeemed successfully
+    payment_redeemed: bool  # Whether the token was actually redeemed
     refund: bool  # Signal client to self-redeem on error
+    refund_token: str | None  # Token to return for refund (unredeemed)
+    error: str | None  # Error message if request failed
     run_id: str | None  # Unique ID for this run (for logging)
 
 
@@ -113,51 +116,103 @@ def create_model():
 
 
 # =============================================================================
+# PRICING CONFIGURATION
+# =============================================================================
+
+# Debug/Testing mode - when enabled, all prompts cost 1 sat
+# Set via PLEBCHAT_DEBUG_MODE environment variable
+DEBUG_MODE = os.getenv("PLEBCHAT_DEBUG_MODE", "true").lower() in ("true", "1", "yes")
+DEBUG_MODE_COST = 1  # Cost per prompt in debug mode
+
+# Agent pricing in sats (from docs/index.md)
+AGENT_PRICING = {
+    "plebchat": {"first": 50, "additional": 10},
+    "deep_research": {"first": 150, "additional": 200},
+    "socratic_coach": {"first": 50, "additional": 0},  # Unable to prompt again
+    "tldr_summarizer": {"first": 150, "additional": 200},
+    "nsfw": {"first": 70, "additional": 20},
+}
+
+# Default pricing for unknown agents
+DEFAULT_PRICING = {"first": 50, "additional": 10}
+
+
+def get_required_amount(agent_id: str = "plebchat", is_first_message: bool = True) -> int:
+    """Get the required payment amount for an agent.
+    
+    In DEBUG_MODE, all prompts cost 1 sat for testing.
+    
+    Args:
+        agent_id: The agent identifier
+        is_first_message: Whether this is the first message in a conversation
+        
+    Returns:
+        Required amount in sats
+    """
+    if DEBUG_MODE:
+        return DEBUG_MODE_COST
+    pricing = AGENT_PRICING.get(agent_id, DEFAULT_PRICING)
+    return pricing["first"] if is_first_message else pricing["additional"]
+
+
+# =============================================================================
 # PAYMENT VALIDATION
 # =============================================================================
 
 
-def validate_token_format(token: str) -> bool:
-    """Validate that a string looks like a valid Cashu token.
-
-    Cashu tokens have two formats:
-    - cashuA: base64url encoded JSON
-    - cashuB: base64url encoded CBOR (binary)
-
-    We just check the prefix and that it's valid base64url.
-    Actual validation happens when the backend tries to redeem it.
+async def validate_token_with_backend(
+    token: str, required_amount: int
+) -> tuple[bool, int, str | None]:
+    """Validate token via backend - checks format, spend state, and amount.
+    
+    Args:
+        token: The cashu ecash token string
+        required_amount: Minimum amount required in sats
+        
+    Returns:
+        Tuple of (is_valid, actual_amount, error_message)
     """
+    wallet_url = os.getenv("WALLET_URL", "http://localhost:8000/api/wallet")
+    
     try:
-        if not (token.startswith("cashuA") or token.startswith("cashuB")):
-            print(f"[Payment] Unknown token format: {token[:10]}...")
-            return False
-
-        token_data = token[6:]
-        padding = 4 - len(token_data) % 4
-        if padding != 4:
-            token_data += "=" * padding
-
-        decoded = base64.urlsafe_b64decode(token_data)
-
-        if len(decoded) < 10:
-            print("[Payment] Token data too short")
-            return False
-
-        token_type = "CBOR" if token.startswith("cashuB") else "JSON"
-        print(f"[Payment] Token format valid: {token_type}, {len(decoded)} bytes")
-        return True
-
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{wallet_url}/check",
+                json={"token": token},
+                timeout=30.0,
+            )
+            
+            if response.status_code != 200:
+                print(f"[Payment] Backend check failed: {response.status_code}")
+                return False, 0, f"Backend error: {response.status_code}"
+            
+            result = response.json()
+            
+            if not result.get("valid"):
+                error = result.get("error", "Invalid token")
+                print(f"[Payment] Token invalid: {error}")
+                return False, 0, error
+            
+            if result.get("spent"):
+                print("[Payment] Token already spent")
+                return False, 0, "Token already spent"
+            
+            actual_amount = result.get("amount", 0)
+            
+            if actual_amount < required_amount:
+                error = f"Insufficient amount: {actual_amount} < {required_amount} sats required"
+                print(f"[Payment] {error}")
+                return False, actual_amount, error
+            
+            print(f"[Payment] Token validated: {actual_amount} sats (required: {required_amount})")
+            return True, actual_amount, None
+            
+    except httpx.TimeoutException:
+        print("[Payment] Backend timeout during validation")
+        return False, 0, "Payment service timeout"
     except Exception as e:
-        print(f"[Payment] Token format validation failed: {e}")
-        return False
-
-
-async def validate_token_state(token: str) -> tuple[bool, str | None]:
-    """Validate that a Cashu token has valid format."""
-    if not validate_token_format(token):
-        return False, None
-    print("[Payment] Token format validated, will attempt redemption on success")
-    return True, None
+        print(f"[Payment] Validation error: {e}")
+        return False, 0, f"Validation failed: {str(e)}"
 
 
 async def redeem_token_to_wallet(token: str) -> bool:
@@ -196,7 +251,13 @@ async def redeem_token_to_wallet(token: str) -> bool:
 
 
 async def validate_payment_node(state: AgentState, config: RunnableConfig) -> dict:
-    """Validate the ecash token WITHOUT redeeming it."""
+    """Validate AND redeem the ecash token BEFORE the LLM is called.
+    
+    This is critical: we MUST redeem the token before calling the LLM to prevent
+    users from getting free LLM calls when token redemption fails after the fact.
+    
+    Uses the backend's /check endpoint to validate, then /receive to redeem.
+    """
     # Get thread_id and run_id for logging
     thread_id = get_thread_id(config)
     run_id = state.get("run_id") or str(uuid.uuid4())
@@ -225,51 +286,94 @@ async def validate_payment_node(state: AgentState, config: RunnableConfig) -> di
         agent_logger.log_payment(thread_id, run_id, "skipped", amount_sats=0)
         return {
             "payment_validated": True,
-            "payment_token": None,
+            "payment_redeemed": False,
             "refund": False,
+            "refund_token": None,
+            "error": None,
             "run_id": run_id,
         }
 
     token = payment["ecash_token"]
-    amount_sats = payment.get("amount_sats", 0)
+    
+    # Determine required amount based on conversation state
+    # TODO: Get agent_id from config when multiple agents are supported
+    agent_id = "plebchat"
+    is_first_message = len([m for m in messages if isinstance(m, HumanMessage)]) <= 1
+    required_amount = get_required_amount(agent_id, is_first_message)
 
     # Debug mode: accept fake tokens for testing without losing funds
     if token.startswith("cashu_debug_") or token == "debug":
         print("[Payment] DEBUG MODE - accepting fake token for testing")
-        agent_logger.log_payment(thread_id, run_id, "debug_mode", amount_sats=amount_sats)
+        agent_logger.log_payment(thread_id, run_id, "debug_mode", amount_sats=required_amount)
         return {
             "payment_validated": True,
-            "payment_token": None,  # Don't try to redeem debug tokens
+            "payment_redeemed": False,  # Fake tokens aren't redeemed
             "refund": False,
+            "refund_token": None,
+            "error": None,
             "run_id": run_id,
         }
+    
+    # Log pricing mode
+    if DEBUG_MODE:
+        print(f"[Payment] DEBUG_MODE enabled - requiring only {required_amount} sat")
+    else:
+        print(f"[Payment] Production pricing - requiring {required_amount} sats")
 
     print("[Payment] ========== RECEIVED TOKEN (for recovery) ==========")
     print(f"[Payment] {token}")
     print("[Payment] ====================================================")
 
-    is_valid, _ = await validate_token_state(token)
+    # Step 1: Validate token with backend (checks format, spend state, and amount)
+    is_valid, actual_amount, error = await validate_token_with_backend(token, required_amount)
 
     if not is_valid:
-        print("[Payment] Token validation failed - client should still have valid token")
+        print(f"[Payment] Token validation failed: {error}")
+        print("[Payment] Returning token for client-side refund")
         agent_logger.log_payment(
-            thread_id, run_id, "validation_failed", amount_sats=amount_sats, token_preview=token
+            thread_id, run_id, "validation_failed", amount_sats=actual_amount, token_preview=token
         )
         return {
             "payment_validated": False,
-            "payment_token": None,
+            "payment_redeemed": False,
             "refund": True,
+            "refund_token": token,  # Return token for client to reclaim
+            "error": f"Payment validation failed: {error}",
             "run_id": run_id,
         }
 
-    print("[Payment] Token validated, will redeem on success")
+    # Step 2: IMMEDIATELY redeem the token BEFORE calling the LLM
+    # This prevents users from getting free LLM calls
+    print(f"[Payment] Token validated ({actual_amount} sats), redeeming NOW...")
+    redeemed = await redeem_token_to_wallet(token)
+    
+    if not redeemed:
+        print("[Payment] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("[Payment] CRITICAL: Token redemption FAILED - blocking LLM call")
+        print("[Payment] Returning token for client-side refund")
+        print("[Payment] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        agent_logger.log_payment(
+            thread_id, run_id, "redemption_failed", amount_sats=actual_amount, token_preview=token
+        )
+        return {
+            "payment_validated": False,
+            "payment_redeemed": False,
+            "refund": True,
+            "refund_token": token,  # Return token for client to reclaim
+            "error": "Payment redemption failed. Your token has been returned.",
+            "run_id": run_id,
+        }
+    
+    print(f"[Payment] Token redeemed successfully ({actual_amount} sats) - proceeding to LLM")
     agent_logger.log_payment(
-        thread_id, run_id, "validated", amount_sats=amount_sats, token_preview=token
+        thread_id, run_id, "redeemed", amount_sats=actual_amount, token_preview=token
     )
     return {
         "payment_validated": True,
-        "payment_token": token,
+        "payment_redeemed": True,
         "refund": False,
+        "refund_token": None,
+        "error": None,
         "run_id": run_id,
     }
 
@@ -279,17 +383,22 @@ async def agent_node(state: AgentState, config: RunnableConfig) -> dict:
     thread_id = get_thread_id(config)
     run_id = state.get("run_id", "unknown")
 
+    # If payment validation failed, return error with refund info
     if not state.get("payment_validated", True):
+        error_msg = state.get("error") or "Payment validation failed"
+        refund_token = state.get("refund_token")
         agent_logger.log_run_end(
-            thread_id, run_id, success=False, error="Payment validation failed", refund=True
+            thread_id, run_id, success=False, error=error_msg, refund=True
         )
         return {
             "messages": [
                 AIMessage(
-                    content="Payment validation failed. Please try again with a valid ecash token."
+                    content=f"Payment failed: {error_msg}. Your token has been returned for a refund."
                 )
             ],
             "refund": True,
+            "refund_token": refund_token,
+            "error": error_msg,
         }
 
     try:
@@ -314,47 +423,40 @@ async def agent_node(state: AgentState, config: RunnableConfig) -> dict:
             ),
         )
 
-        return {"messages": [response]}
+        return {"messages": [response], "error": None}
 
     except Exception as e:
-        print(f"[Agent] LLM processing failed: {e}")
-        agent_logger.log_run_end(thread_id, run_id, success=False, error=str(e), refund=True)
-        token = state.get("payment_token")
-        if token:
-            print("[Payment] ========== REFUNDABLE TOKEN ==========")
-            print(f"[Payment] {token}")
-            print("[Payment] ========================================")
+        error_msg = str(e)
+        print(f"[Agent] LLM processing failed: {error_msg}")
+        agent_logger.log_run_end(thread_id, run_id, success=False, error=error_msg, refund=False)
+        # Note: Payment was already redeemed before reaching this point,
+        # so we cannot offer a refund if the LLM fails. This is intentional -
+        # we've already done the work of receiving the payment.
         return {
             "messages": [
                 AIMessage(
                     content="Sorry, I encountered an error processing your request. "
-                    "Your payment has not been taken - please try again."
+                    "Please try again with a new payment."
                 )
             ],
-            "refund": True,
+            "refund": False,
+            "refund_token": None,
+            "error": f"LLM error: {error_msg}",
         }
 
 
 async def finalize_node(state: AgentState, config: RunnableConfig) -> dict:
-    """Finalize the conversation and redeem payment if successful."""
+    """Finalize the conversation. Payment was already redeemed before LLM call."""
     thread_id = get_thread_id(config)
     run_id = state.get("run_id", "unknown")
-    token = state.get("payment_token")
 
-    if token:
-        print("[Payment] Attempting to redeem token to wallet...")
-        redeemed = await redeem_token_to_wallet(token)
-        if not redeemed:
-            print("[Payment] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-            print("[Payment] WARNING: Conversation succeeded but token redemption failed!")
-            print("[Payment] UNREDEEMED TOKEN - MANUAL RECOVERY NEEDED:")
-            print(f"[Payment] {token}")
-            print("[Payment] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-            agent_logger.log_payment(thread_id, run_id, "redemption_failed", token_preview=token)
-        else:
-            print("[Payment] Token redeemed successfully")
-            agent_logger.log_payment(thread_id, run_id, "redeemed", token_preview=token)
-
+    # Payment was already redeemed in validate_payment_node BEFORE the LLM call.
+    # This node just logs the successful completion.
+    
+    was_redeemed = state.get("payment_redeemed", False)
+    if was_redeemed:
+        print("[Payment] Run complete - payment was redeemed before LLM call")
+    
     # Get final response for logging
     messages = state.get("messages", [])
     final_response = None

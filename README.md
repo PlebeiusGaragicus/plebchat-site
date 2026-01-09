@@ -139,3 +139,13 @@ cd backend
 pip install -e ".[dev]"
 pytest
 ```
+
+---
+
+### Generate a very insecure mnemonic:
+
+```sh
+cd /Users/satoshi/Downloads/plebchat-site/backend
+source venv/bin/activate
+python -c "from mnemonic import Mnemonic; print(Mnemonic('english').generate())"
+```
