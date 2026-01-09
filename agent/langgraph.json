@@ -1,0 +1,8 @@
+{
+  "$schema": "https://langgra.ph/schema.json",
+  "dependencies": ["."],
+  "graphs": {
+    "plebchat": "./src/plebchat/graph.py:graph"
+  },
+  "env": ".env"
+}
