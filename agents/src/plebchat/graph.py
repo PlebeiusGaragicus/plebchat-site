@@ -38,7 +38,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
-from agent.logging import agent_logger
+from agents.src.plebchat.logging import agent_logger
 
 
 def get_thread_id(config: RunnableConfig | None) -> str:
