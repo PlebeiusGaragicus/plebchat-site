@@ -1,5 +1,5 @@
-"""Reader Assistant LangGraph Agent."""
+"""PlebChat LangGraph Agent."""
 
-from agents.src.plebchat.graph import graph
+from src.plebchat.graph import graph
 
 __all__ = ["graph"]

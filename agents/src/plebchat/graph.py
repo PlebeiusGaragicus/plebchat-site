@@ -1,44 +1,33 @@
-"""LangGraph agent for the SvelteReader AI chat assistant.
+"""LangGraph agent for PlebChat AI chat assistant.
 
-This agent helps users discuss and analyze passages from their ebooks.
-It receives context about highlighted text and user notes, then provides
-intelligent responses about the content.
-
-Architecture: Agent-Driven RAG with Client-Side Tool Execution
-1. Agent decides when to search/retrieve from the book
-2. Tools are defined as stubs - execution happens on the client
-3. Graph uses interrupt_before=["tools"] to pause before tool execution
-4. Client executes tools locally (EPUB access, vector search)
-5. Client resumes graph with tool results
+This is a simple conversational AI agent that:
+1. Validates ecash payment tokens
+2. Processes user messages with an LLM
+3. Redeems payment tokens on successful completion
 
 Payment flow (validate-then-redeem-on-success):
 1. Client sends ecash token with message
-2. validate_payment node checks token is UNSPENT (doesn't redeem)
-3. agent node processes the LLM request (may call tools)
-4. On SUCCESS: redeem token to wallet
+2. validate_payment node checks token format (doesn't redeem yet)
+3. agent node processes the LLM request
+4. On SUCCESS: redeem token to backend wallet
 5. On FAILURE: don't redeem, return refund flag so client can self-recover
-
-See docs/ecash-payment-flow.md for full payment design.
 """
 
 from __future__ import annotations
 
-import os
-import httpx
-import json
 import base64
+import os
 import uuid
 from typing import Annotated, Literal, TypedDict
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
+import httpx
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode
 
-from agents.src.plebchat.logging import agent_logger
+from src.plebchat.logging import agent_logger
 
 
 def get_thread_id(config: RunnableConfig | None) -> str:
@@ -53,27 +42,19 @@ def get_thread_id(config: RunnableConfig | None) -> str:
 # STATE DEFINITIONS
 # =============================================================================
 
+
 class PaymentInfo(TypedDict, total=False):
     """Payment information from client."""
+
     ecash_token: str  # Cashu ecash token
     amount_sats: int  # Expected amount in sats
     mint: str | None  # Mint URL
 
 
-class PassageContext(TypedDict, total=False):
-    """Context about the passage being discussed."""
-    text: str  # The highlighted text from the book
-    note: str | None  # User's note about the passage
-    book_title: str | None  # Title of the book
-    chapter: str | None  # Current chapter
-
-
 class AgentState(TypedDict):
-    """State for the reader assistant agent."""
+    """State for the PlebChat agent."""
+
     messages: Annotated[list[BaseMessage], add_messages]
-    passage_context: PassageContext | None
-    book_id: str | None  # Current book ID for tool execution
-    book_context: str | None  # Pre-formatted book context (TOC, metadata) from client
     payment: PaymentInfo | None
     payment_validated: bool  # Token checked but not redeemed
     payment_token: str | None  # Token to redeem on success
@@ -85,21 +66,20 @@ class AgentState(TypedDict):
 # SYSTEM PROMPT
 # =============================================================================
 
-def get_system_prompt(
-    passage_context: PassageContext | None,
-    book_context: str | None
-) -> str:
-    """Generate a system prompt based on the passage and book context."""
-    base_prompt = """
-You are a simple chat assistant.
-"""
+SYSTEM_PROMPT = """You are PlebChat, a helpful AI assistant. You provide clear, concise, and accurate responses to user questions.
 
-    return base_prompt
+Guidelines:
+- Be friendly and conversational
+- Provide direct answers without unnecessary preamble
+- If you don't know something, say so honestly
+- Keep responses focused and relevant to the question
+"""
 
 
 # =============================================================================
 # MODEL CREATION
 # =============================================================================
+
 
 def create_model():
     """Create the LLM model using OpenAI-compatible endpoint.
@@ -136,36 +116,37 @@ def create_model():
 # PAYMENT VALIDATION
 # =============================================================================
 
+
 def validate_token_format(token: str) -> bool:
     """Validate that a string looks like a valid Cashu token.
-    
+
     Cashu tokens have two formats:
     - cashuA: base64url encoded JSON
     - cashuB: base64url encoded CBOR (binary)
-    
+
     We just check the prefix and that it's valid base64url.
-    Actual validation happens when nutstash tries to redeem it.
+    Actual validation happens when the backend tries to redeem it.
     """
     try:
         if not (token.startswith("cashuA") or token.startswith("cashuB")):
             print(f"[Payment] Unknown token format: {token[:10]}...")
             return False
-        
+
         token_data = token[6:]
         padding = 4 - len(token_data) % 4
         if padding != 4:
             token_data += "=" * padding
-        
+
         decoded = base64.urlsafe_b64decode(token_data)
-        
+
         if len(decoded) < 10:
             print("[Payment] Token data too short")
             return False
-        
+
         token_type = "CBOR" if token.startswith("cashuB") else "JSON"
         print(f"[Payment] Token format valid: {token_type}, {len(decoded)} bytes")
         return True
-        
+
     except Exception as e:
         print(f"[Payment] Token format validation failed: {e}")
         return False
@@ -182,7 +163,7 @@ async def validate_token_state(token: str) -> tuple[bool, str | None]:
 async def redeem_token_to_wallet(token: str) -> bool:
     """Redeem a Cashu token to the backend wallet service."""
     wallet_url = os.getenv("WALLET_URL", "http://localhost:8000/api/wallet")
-    
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -190,7 +171,7 @@ async def redeem_token_to_wallet(token: str) -> bool:
                 json={"token": token},
                 timeout=30.0,
             )
-            
+
             if response.status_code == 200:
                 result = response.json()
                 if result.get("success"):
@@ -203,7 +184,7 @@ async def redeem_token_to_wallet(token: str) -> bool:
             else:
                 print(f"[Payment] Failed to redeem: {response.text}")
                 return False
-                
+
     except Exception as e:
         print(f"[Payment] Redemption error: {e}")
         return False
@@ -213,12 +194,13 @@ async def redeem_token_to_wallet(token: str) -> bool:
 # GRAPH NODES
 # =============================================================================
 
+
 async def validate_payment_node(state: AgentState, config: RunnableConfig) -> dict:
     """Validate the ecash token WITHOUT redeeming it."""
     # Get thread_id and run_id for logging
     thread_id = get_thread_id(config)
     run_id = state.get("run_id") or str(uuid.uuid4())
-    
+
     # Extract first human message for logging
     messages = state.get("messages", [])
     first_message = ""
@@ -226,19 +208,17 @@ async def validate_payment_node(state: AgentState, config: RunnableConfig) -> di
         if isinstance(msg, HumanMessage):
             first_message = msg.content if isinstance(msg.content, str) else str(msg.content)
             break
-    
+
     # Log run start
     agent_logger.log_run_start(
         thread_id=thread_id,
         run_id=run_id,
         message=first_message,
-        book_context=state.get("book_context"),
-        passage_context=state.get("passage_context"),
         payment=state.get("payment"),
     )
-    
+
     payment = state.get("payment")
-    
+
     # If no payment provided, skip validation (free mode for development)
     if not payment or not payment.get("ecash_token"):
         print("[Payment] No payment token provided, skipping validation (free mode)")
@@ -249,10 +229,10 @@ async def validate_payment_node(state: AgentState, config: RunnableConfig) -> di
             "refund": False,
             "run_id": run_id,
         }
-    
+
     token = payment["ecash_token"]
     amount_sats = payment.get("amount_sats", 0)
-    
+
     # Debug mode: accept fake tokens for testing without losing funds
     if token.startswith("cashu_debug_") or token == "debug":
         print("[Payment] DEBUG MODE - accepting fake token for testing")
@@ -263,25 +243,29 @@ async def validate_payment_node(state: AgentState, config: RunnableConfig) -> di
             "refund": False,
             "run_id": run_id,
         }
-    
-    print(f"[Payment] ========== RECEIVED TOKEN (for recovery) ==========")
+
+    print("[Payment] ========== RECEIVED TOKEN (for recovery) ==========")
     print(f"[Payment] {token}")
-    print(f"[Payment] ====================================================")
-    
-    is_valid, mint_url = await validate_token_state(token)
-    
+    print("[Payment] ====================================================")
+
+    is_valid, _ = await validate_token_state(token)
+
     if not is_valid:
         print("[Payment] Token validation failed - client should still have valid token")
-        agent_logger.log_payment(thread_id, run_id, "validation_failed", amount_sats=amount_sats, token_preview=token)
+        agent_logger.log_payment(
+            thread_id, run_id, "validation_failed", amount_sats=amount_sats, token_preview=token
+        )
         return {
             "payment_validated": False,
             "payment_token": None,
             "refund": True,
             "run_id": run_id,
         }
-    
-    print(f"[Payment] Token validated, will redeem on success")
-    agent_logger.log_payment(thread_id, run_id, "validated", amount_sats=amount_sats, token_preview=token)
+
+    print("[Payment] Token validated, will redeem on success")
+    agent_logger.log_payment(
+        thread_id, run_id, "validated", amount_sats=amount_sats, token_preview=token
+    )
     return {
         "payment_validated": True,
         "payment_token": token,
@@ -291,55 +275,47 @@ async def validate_payment_node(state: AgentState, config: RunnableConfig) -> di
 
 
 async def agent_node(state: AgentState, config: RunnableConfig) -> dict:
-    """Process the user's message with the LLM.
-    
-    The model has access to tools for book retrieval.
-    Tool calls will cause an interrupt - client executes them.
-    """
+    """Process the user's message with the LLM."""
     thread_id = get_thread_id(config)
     run_id = state.get("run_id", "unknown")
-    
+
     if not state.get("payment_validated", True):
-        agent_logger.log_run_end(thread_id, run_id, success=False, error="Payment validation failed", refund=True)
+        agent_logger.log_run_end(
+            thread_id, run_id, success=False, error="Payment validation failed", refund=True
+        )
         return {
-            "messages": [AIMessage(content="Payment validation failed. Please try again with a valid ecash token.")],
+            "messages": [
+                AIMessage(
+                    content="Payment validation failed. Please try again with a valid ecash token."
+                )
+            ],
             "refund": True,
         }
-    
+
     try:
         model = create_model()
-        
-        # Bind tools to the model
-        model_with_tools = model.bind_tools(CLIENT_TOOLS)
-        
-        # Build messages with system prompt (includes book context with TOC)
-        system_prompt = get_system_prompt(
-            state.get("passage_context"),
-            state.get("book_context")
-        )
-        messages = [SystemMessage(content=system_prompt)] + state["messages"]
-        
-        # Log book context availability for debugging
-        has_book_context = bool(state.get("book_context"))
-        print(f"[Agent] Invoking LLM... (book_context: {has_book_context})")
-        response = await model_with_tools.ainvoke(messages)
-        print(f"[Agent] LLM response received. Has tool calls: {bool(response.tool_calls)}")
-        
+
+        # Build messages with system prompt
+        messages = [SystemMessage(content=SYSTEM_PROMPT)] + state["messages"]
+
+        print("[Agent] Invoking LLM...")
+        response = await model.ainvoke(messages)
+        print("[Agent] LLM response received")
+
         # Log the LLM response
-        tool_calls_for_log = None
-        if response.tool_calls:
-            tool_calls_for_log = [{"name": tc["name"], "args": tc["args"]} for tc in response.tool_calls]
-        
         agent_logger.log_llm_response(
             thread_id=thread_id,
             run_id=run_id,
             content=response.content if isinstance(response.content, str) else str(response.content),
-            tool_calls=tool_calls_for_log,
-            finish_reason=response.response_metadata.get("finish_reason") if hasattr(response, "response_metadata") else None,
+            finish_reason=(
+                response.response_metadata.get("finish_reason")
+                if hasattr(response, "response_metadata")
+                else None
+            ),
         )
-        
+
         return {"messages": [response]}
-        
+
     except Exception as e:
         print(f"[Agent] LLM processing failed: {e}")
         agent_logger.log_run_end(thread_id, run_id, success=False, error=str(e), refund=True)
@@ -349,7 +325,12 @@ async def agent_node(state: AgentState, config: RunnableConfig) -> dict:
             print(f"[Payment] {token}")
             print("[Payment] ========================================")
         return {
-            "messages": [AIMessage(content=f"Sorry, I encountered an error processing your request. Your payment has not been taken - please try again.")],
+            "messages": [
+                AIMessage(
+                    content="Sorry, I encountered an error processing your request. "
+                    "Your payment has not been taken - please try again."
+                )
+            ],
             "refund": True,
         }
 
@@ -359,7 +340,7 @@ async def finalize_node(state: AgentState, config: RunnableConfig) -> dict:
     thread_id = get_thread_id(config)
     run_id = state.get("run_id", "unknown")
     token = state.get("payment_token")
-    
+
     if token:
         print("[Payment] Attempting to redeem token to wallet...")
         redeemed = await redeem_token_to_wallet(token)
@@ -373,15 +354,17 @@ async def finalize_node(state: AgentState, config: RunnableConfig) -> dict:
         else:
             print("[Payment] Token redeemed successfully")
             agent_logger.log_payment(thread_id, run_id, "redeemed", token_preview=token)
-    
+
     # Get final response for logging
     messages = state.get("messages", [])
     final_response = None
     if messages:
         last_msg = messages[-1]
         if isinstance(last_msg, AIMessage):
-            final_response = last_msg.content if isinstance(last_msg.content, str) else str(last_msg.content)
-    
+            final_response = (
+                last_msg.content if isinstance(last_msg.content, str) else str(last_msg.content)
+            )
+
     agent_logger.log_run_end(
         thread_id=thread_id,
         run_id=run_id,
@@ -389,13 +372,14 @@ async def finalize_node(state: AgentState, config: RunnableConfig) -> dict:
         success=True,
         refund=False,
     )
-    
+
     return {"refund": False}
 
 
 # =============================================================================
 # GRAPH ROUTING
 # =============================================================================
+
 
 def route_after_validation(state: AgentState) -> Literal["agent", "end"]:
     """Route based on payment validation result."""
@@ -404,63 +388,9 @@ def route_after_validation(state: AgentState) -> Literal["agent", "end"]:
     return "end"
 
 
-def should_continue(state: AgentState, config: RunnableConfig) -> Literal["tools", "finalize"]:
-    """Determine if the agent wants to call tools or is done."""
-    thread_id = get_thread_id(config)
-    run_id = state.get("run_id", "unknown")
-    messages = state.get("messages", [])
-    if not messages:
-        return "finalize"
-    
-    last_message = messages[-1]
-    
-    # Log any tool results that have come back from the client
-    for msg in messages:
-        if isinstance(msg, ToolMessage):
-            # Parse the content to check for errors
-            content = msg.content if isinstance(msg.content, str) else str(msg.content)
-            error = None
-            if content.startswith('{"error":') or '"error":' in content:
-                try:
-                    parsed = json.loads(content)
-                    error = parsed.get("error")
-                except:
-                    pass
-            
-            agent_logger.log_tool_call(
-                thread_id=thread_id,
-                run_id=run_id,
-                tool_name=msg.name or "unknown",
-                args={},  # Args were logged when tool was called
-                result=content if not error else None,
-                error=error,
-            )
-    
-    # Check if the last message has tool calls
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        print(f"[Agent] Tool calls detected: {[tc['name'] for tc in last_message.tool_calls]}")
-        # Log the interrupt
-        agent_logger.log_tool_interrupt(
-            thread_id=thread_id,
-            run_id=run_id,
-            tool_calls=last_message.tool_calls,
-        )
-        return "tools"
-    
-    return "finalize"
-
-
-def route_after_tools(state: AgentState) -> Literal["agent"]:
-    """After tools execute, always go back to agent for next step."""
-    return "agent"
-
-
 # =============================================================================
 # GRAPH CONSTRUCTION
 # =============================================================================
-
-# Create tool node for client-executed tools
-tool_node = ToolNode(CLIENT_TOOLS)
 
 # Build the graph
 builder = StateGraph(AgentState)
@@ -468,7 +398,6 @@ builder = StateGraph(AgentState)
 # Add nodes
 builder.add_node("validate_payment", validate_payment_node)
 builder.add_node("agent", agent_node)
-builder.add_node("tools", tool_node)
 builder.add_node("finalize", finalize_node)
 
 # Add edges
@@ -478,15 +407,8 @@ builder.add_conditional_edges(
     route_after_validation,
     {"agent": "agent", "end": END},
 )
-builder.add_conditional_edges(
-    "agent",
-    should_continue,
-    {"tools": "tools", "finalize": "finalize"},
-)
-builder.add_edge("tools", "agent")
+builder.add_edge("agent", "finalize")
 builder.add_edge("finalize", END)
 
-# Compile the graph WITH interrupt_before tools
-# This causes the graph to pause before executing tools,
-# allowing the client to execute them locally and resume
-graph = builder.compile(interrupt_before=["tools"])
+# Compile the graph
+graph = builder.compile()

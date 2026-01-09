@@ -67,6 +67,7 @@ class AgentLogger:
         book_context: str | None = None,
         passage_context: dict | None = None,
         payment: dict | None = None,
+        **kwargs,  # Accept additional kwargs for flexibility
     ) -> None:
         """Log the start of an agent run within a thread."""
         event = {
@@ -141,6 +142,7 @@ class AgentLogger:
         content: str,
         tool_calls: list[dict] | None = None,
         finish_reason: str | None = None,
+        **kwargs,  # Accept additional kwargs for flexibility
     ) -> None:
         """Log an LLM response."""
         event = {
