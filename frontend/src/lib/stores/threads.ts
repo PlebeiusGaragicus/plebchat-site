@@ -25,6 +25,7 @@ export interface Thread {
 	messages: ThreadMessage[];
 	promptCount: number;
 	langgraphThreadId?: string; // Maps to LangGraph server thread ID
+	pinned?: boolean; // Pinned threads appear at top of list
 }
 
 const STORAGE_KEY = 'plebchat-threads';
@@ -134,6 +135,15 @@ function createThreadsStore() {
 			update(threads => threads.filter(t => t.id !== threadId));
 		},
 
+		togglePin: (threadId: string) => {
+			update(threads => {
+				return threads.map(thread => {
+					if (thread.id !== threadId) return thread;
+					return { ...thread, pinned: !thread.pinned };
+				});
+			});
+		},
+
 		getThread: (threadId: string): Thread | undefined => {
 			return get({ subscribe }).find(t => t.id === threadId);
 		},
@@ -183,17 +193,43 @@ export const currentThread = derived(
 );
 
 // Get threads for a specific agent (returns a derived store)
+// Sorted by: pinned first, then by createdAt (newest first)
 export function getThreadsForAgent(agentId: string) {
 	return derived(threads, ($threads) => 
 		$threads.filter(t => t.agentId === agentId)
-			.sort((a, b) => b.updatedAt - a.updatedAt)
+			.sort((a, b) => {
+				if (a.pinned && !b.pinned) return -1;
+				if (!a.pinned && b.pinned) return 1;
+				return b.createdAt - a.createdAt;
+			})
 	);
 }
 
 // Filter threads by agent ID (pure function for use with Svelte 5 runes)
+// Sorted by: pinned first, then by createdAt (newest first)
 export function filterThreadsByAgent(allThreads: Thread[], agentId: string | null): Thread[] {
 	if (!agentId) return [];
 	return allThreads
 		.filter(t => t.agentId === agentId)
-		.sort((a, b) => b.updatedAt - a.updatedAt);
+		.sort((a, b) => {
+			// Pinned threads always come first
+			if (a.pinned && !b.pinned) return -1;
+			if (!a.pinned && b.pinned) return 1;
+			// Within same pin status, sort by createdAt (newest first)
+			return b.createdAt - a.createdAt;
+		});
+}
+
+// Search threads by query - searches through all message content
+export function searchThreads(threads: Thread[], query: string): Thread[] {
+	if (!query.trim()) return threads;
+	const lowerQuery = query.toLowerCase();
+	return threads.filter(thread => {
+		// Search in title
+		if (thread.title.toLowerCase().includes(lowerQuery)) return true;
+		// Search in all messages
+		return thread.messages.some(msg => 
+			msg.content.toLowerCase().includes(lowerQuery)
+		);
+	});
 }
