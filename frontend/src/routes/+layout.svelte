@@ -12,9 +12,9 @@
 	<link rel="icon" href="/favicon.svg" />
 </svelte:head>
 
-<div class="bg-digital min-h-screen flex flex-col">
+<div id="app-shell" class="bg-digital">
 	<Navbar />
-	<main class="flex-1 relative z-10">
+	<main class="flex-1 relative z-10 overflow-hidden">
 		{@render children()}
 	</main>
 </div>

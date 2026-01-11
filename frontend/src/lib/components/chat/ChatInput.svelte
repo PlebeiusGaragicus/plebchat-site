@@ -1,25 +1,25 @@
 <script lang="ts">
 	import { cn } from '$lib/utils.js';
-	import { Send, Settings, Loader2 } from '@lucide/svelte';
+	import { Send, Settings, Loader2, AlertTriangle } from '@lucide/svelte';
 	import { selectedAgent } from '$lib/stores/agent.js';
 	import { currentThread } from '$lib/stores/threads.js';
-	import { TESTING_MODE, TESTING_MODE_COST } from '$lib/stores/stream.svelte.js';
 
 	interface Props {
 		onSubmit: (message: string) => void;
 		isLoading?: boolean;
 		disabled?: boolean;
+		balance?: number;
+		onOpenSettings?: () => void;
 	}
 
-	let { onSubmit, isLoading = false, disabled = false }: Props = $props();
+	let { onSubmit, isLoading = false, disabled = false, balance = 0, onOpenSettings }: Props = $props();
 	
 	let message = $state('');
 	let textareaRef = $state<HTMLTextAreaElement | null>(null);
-	let showSettings = $state(false);
 
 	function handleSubmit(e?: Event) {
 		e?.preventDefault();
-		if (!message.trim() || isLoading || disabled) return;
+		if (!message.trim() || isLoading || disabled || hasInsufficientBalance) return;
 		onSubmit(message.trim());
 		message = '';
 		// Reset textarea height
@@ -41,21 +41,36 @@
 		textareaRef.style.height = Math.min(textareaRef.scrollHeight, 150) + 'px';
 	}
 
-	// Calculate cost for current prompt
+	// Calculate cost for current prompt - always uses full agent pricing
 	let promptCost = $derived.by(() => {
 		if (!$selectedAgent) return 0;
-		if (TESTING_MODE) return TESTING_MODE_COST;
 		const thread = $currentThread;
 		if (!thread || thread.promptCount === 0) {
 			return $selectedAgent.initialCost;
 		}
 		return $selectedAgent.additionalCost;
 	});
+
+	// Check if user has insufficient balance
+	let hasInsufficientBalance = $derived($selectedAgent && balance < promptCost);
 </script>
 
 <form onsubmit={handleSubmit} class="relative">
+	<!-- Low balance warning -->
+	{#if hasInsufficientBalance}
+		<div class="absolute -top-10 sm:-top-12 left-0 right-0 flex items-center justify-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400">
+			<AlertTriangle class="w-3.5 h-3.5 flex-shrink-0" />
+			<span class="text-[10px] sm:text-xs">
+				Low balance: you need <span class="font-semibold">{promptCost}</span> sats but only have <span class="font-semibold">{balance}</span> sats
+			</span>
+		</div>
+	{/if}
+
 	<!-- Input container -->
-	<div class="glow-input rounded-full sm:rounded-[2rem] p-1 sm:p-1.5 overflow-hidden">
+	<div class={cn(
+		"glow-input rounded-full sm:rounded-[2rem] p-1 sm:p-1.5 overflow-hidden",
+		hasInsufficientBalance && "border-amber-500/50"
+	)}>
 		<div class="flex items-end gap-1 sm:gap-2">
 			<!-- Text input area -->
 			<textarea
@@ -63,7 +78,7 @@
 				bind:value={message}
 				onkeydown={handleKeyDown}
 				oninput={autoResize}
-				placeholder={$selectedAgent ? "Ask me anything..." : "Select an agent first"}
+				placeholder={hasInsufficientBalance ? "Add funds to continue..." : ($selectedAgent ? "Ask me anything..." : "Select an agent first")}
 				disabled={disabled || !$selectedAgent}
 				rows={1}
 				class={cn(
@@ -77,28 +92,30 @@
 
 			<!-- Action buttons -->
 			<div class="flex items-center gap-1 pb-2 sm:pb-3 pr-2 sm:pr-3 flex-shrink-0">
-				<!-- Settings button - hidden on mobile -->
-				<button
-					type="button"
-					onclick={() => showSettings = !showSettings}
-					class={cn(
-						"hidden sm:flex p-2 rounded-full transition-colors",
-						"text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]",
-						"hover:bg-[var(--color-bg-elevated)]"
-					)}
-					title="Agent settings"
-				>
-					<Settings class="w-4 h-4 sm:w-5 sm:h-5" />
-				</button>
+				<!-- Settings button - always visible -->
+				{#if $selectedAgent && onOpenSettings}
+					<button
+						type="button"
+						onclick={onOpenSettings}
+						class={cn(
+							"flex p-2 rounded-full transition-colors",
+							"text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]",
+							"hover:bg-[var(--color-bg-elevated)]"
+						)}
+						title="Agent settings"
+					>
+						<Settings class="w-4 h-4 sm:w-5 sm:h-5" />
+					</button>
+				{/if}
 
 				<!-- Send button -->
 				<button
 					type="submit"
-					disabled={!message.trim() || isLoading || disabled || !$selectedAgent}
+					disabled={!message.trim() || isLoading || disabled || !$selectedAgent || hasInsufficientBalance}
 					class={cn(
 						"p-2 sm:p-3 rounded-full transition-all",
-						"bg-gradient-to-r from-[var(--color-cyan-glow)] to-[var(--color-cyan-dim)]",
-						"text-[var(--color-bg-primary)] font-medium",
+						"bg-gradient-to-r from-[var(--color-accent-primary)] to-[var(--color-accent-dim)]",
+						"text-black font-medium",
 						"hover:shadow-[var(--shadow-glow-sm)]",
 						"disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
 					)}
@@ -113,41 +130,11 @@
 		</div>
 	</div>
 
-	<!-- Cost indicator -->
-	{#if $selectedAgent && message.trim()}
+	<!-- Cost indicator (only show when not showing low balance warning) -->
+	{#if $selectedAgent && message.trim() && !hasInsufficientBalance}
 		<div class="absolute -top-6 sm:-top-8 right-2 sm:right-0 text-[10px] sm:text-xs text-[var(--color-text-muted)]">
-			<span class="text-[var(--color-cyan-glow)]">{promptCost}</span> sats
+			<span class="text-[var(--color-accent-primary)]">{promptCost}</span> sats
 		</div>
 	{/if}
 </form>
 
-<!-- Settings Modal -->
-{#if showSettings}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div 
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" 
-		onclick={() => showSettings = false}
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="settings-title"
-	>
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div class="bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] rounded-xl p-4 sm:p-6 max-w-md w-full" onclick={(e) => e.stopPropagation()}>
-			<h3 id="settings-title" class="text-base sm:text-lg font-semibold text-[var(--color-text-primary)] mb-4">Agent Settings</h3>
-			<p class="text-[var(--color-text-secondary)] text-sm mb-4">
-				Configure {$selectedAgent?.name} settings for this chat session.
-			</p>
-			<div class="text-[var(--color-text-muted)] text-sm">
-				<em>Settings coming soon...</em>
-			</div>
-			<div class="mt-6 flex justify-end gap-2">
-				<button 
-					onclick={() => showSettings = false}
-					class="btn btn-ghost"
-				>
-					Close
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}

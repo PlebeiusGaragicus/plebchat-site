@@ -347,6 +347,13 @@ The admin panel is a Svelte 5 application located in `admin/` that provides a we
 ### Generating a Wallet Mnemonic
 
 ```bash
+cd backend
+source venv/bin/activate
+python scripts/generate_mnemonic.py           # 12 words (default)
+python scripts/generate_mnemonic.py --24      # 24 words
+```
+
+```bash
 python -c "from mnemonic import Mnemonic; print(Mnemonic('english').generate())"
 ```
 

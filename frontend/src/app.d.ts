@@ -10,4 +10,16 @@ declare global {
 	}
 }
 
+// Vite environment variables
+interface ImportMetaEnv {
+	readonly VITE_DEBUG?: string;
+	readonly VITE_CASHU_MINT_URL?: string;
+	readonly VITE_LANGGRAPH_API_URL?: string;
+	readonly VITE_ASSISTANT_ID?: string;
+}
+
+interface ImportMeta {
+	readonly env: ImportMetaEnv;
+}
+
 export {};

@@ -10,6 +10,7 @@ export {
 	currentThreadId, 
 	currentThread, 
 	getThreadsForAgent,
+	filterThreadsByAgent,
 	type Thread,
 	type ThreadMessage,
 	type ToolCall
@@ -19,8 +20,8 @@ export {
 	getStreamState, 
 	isStreaming, 
 	getStreamError,
-	TESTING_MODE,
-	TESTING_MODE_COST,
+	DEBUG_MODE,
 	type PaymentInfo,
 	type SendMessageOptions
 } from './stores/stream.svelte.js';
+export { sidebar } from './stores/sidebar.svelte.js';

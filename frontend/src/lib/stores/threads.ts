@@ -138,6 +138,30 @@ function createThreadsStore() {
 			return get({ subscribe }).find(t => t.id === threadId);
 		},
 
+		// Sync messages from server - replaces local messages with server state
+		syncMessagesFromServer: (threadId: string, messages: ThreadMessage[]) => {
+			update(threads => {
+				return threads.map(thread => {
+					if (thread.id !== threadId) return thread;
+					
+					// Count human messages for promptCount
+					const promptCount = messages.filter(m => m.type === 'human').length;
+					
+					// Update title from first human message if needed
+					const firstHuman = messages.find(m => m.type === 'human');
+					const title = firstHuman ? firstHuman.content.slice(0, 50) : thread.title;
+					
+					return {
+						...thread,
+						messages,
+						promptCount,
+						title,
+						updatedAt: Date.now()
+					};
+				});
+			});
+		},
+
 		clear: () => {
 			set([]);
 		}
@@ -158,10 +182,18 @@ export const currentThread = derived(
 	}
 );
 
-// Get threads for a specific agent
+// Get threads for a specific agent (returns a derived store)
 export function getThreadsForAgent(agentId: string) {
 	return derived(threads, ($threads) => 
 		$threads.filter(t => t.agentId === agentId)
 			.sort((a, b) => b.updatedAt - a.updatedAt)
 	);
+}
+
+// Filter threads by agent ID (pure function for use with Svelte 5 runes)
+export function filterThreadsByAgent(allThreads: Thread[], agentId: string | null): Thread[] {
+	if (!agentId) return [];
+	return allThreads
+		.filter(t => t.agentId === agentId)
+		.sort((a, b) => b.updatedAt - a.updatedAt);
 }

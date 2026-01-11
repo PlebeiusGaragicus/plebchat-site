@@ -6,10 +6,9 @@ import { selectedAgent } from './agent.js';
 const API_URL = import.meta.env.VITE_LANGGRAPH_API_URL || 'http://localhost:2024';
 const ASSISTANT_ID = import.meta.env.VITE_ASSISTANT_ID || 'plebchat';
 
-// Testing mode: When enabled, all prompts cost 1 sat regardless of agent pricing
-// Set to false for production
-export const TESTING_MODE = true;
-export const TESTING_MODE_COST = 1; // Cost per prompt in testing mode
+// Debug mode: Indicates testnet/development environment (FakeWallet mint)
+// Set via VITE_DEBUG=1 in .env.development - shows debug badge in navbar
+export const DEBUG_MODE = import.meta.env.VITE_DEBUG === '1';
 
 interface StreamState {
 	isLoading: boolean;
@@ -258,4 +257,75 @@ export function getCurrentResponse(): string {
 
 export function getRefundToken(): string | null {
 	return streamState.refundToken;
+}
+
+// Sync thread messages from LangGraph server
+// This ensures we have the complete conversation history even if streaming was interrupted
+export async function syncThreadFromServer(localThreadId: string): Promise<boolean> {
+	const langgraphThreadId = threads.getLanggraphThreadId(localThreadId);
+	
+	if (!langgraphThreadId) {
+		console.log('[Sync] No LangGraph thread ID found for local thread:', localThreadId);
+		return false;
+	}
+	
+	try {
+		const client = createClient();
+		
+		// Get the thread state from LangGraph
+		const threadState = await client.threads.getState(langgraphThreadId);
+		
+		if (!threadState || !threadState.values) {
+			console.log('[Sync] No state found for thread:', langgraphThreadId);
+			return false;
+		}
+		
+		// Extract messages from the state
+		const serverMessages = (threadState.values as { messages?: unknown[] }).messages;
+		
+		if (!serverMessages || !Array.isArray(serverMessages)) {
+			console.log('[Sync] No messages in thread state');
+			return false;
+		}
+		
+		// Convert LangGraph messages to our format
+		const convertedMessages: ThreadMessage[] = serverMessages.map((msg: unknown, index: number) => {
+			const m = msg as { 
+				type?: string; 
+				content?: string; 
+				id?: string;
+				tool_calls?: Array<{ id: string; name: string; args: Record<string, unknown> }>;
+			};
+			
+			// Determine message type
+			let type: 'human' | 'ai' | 'tool' = 'ai';
+			if (m.type === 'human' || m.type === 'HumanMessage') {
+				type = 'human';
+			} else if (m.type === 'tool' || m.type === 'ToolMessage') {
+				type = 'tool';
+			}
+			
+			return {
+				id: m.id || `server-${index}-${Date.now()}`,
+				type,
+				content: m.content || '',
+				timestamp: Date.now() - (serverMessages.length - index) * 1000, // Approximate timestamps
+				toolCalls: m.tool_calls?.map(tc => ({
+					id: tc.id,
+					name: tc.name,
+					args: tc.args
+				}))
+			};
+		});
+		
+		// Update local thread with server messages
+		threads.syncMessagesFromServer(localThreadId, convertedMessages);
+		
+		console.log('[Sync] Successfully synced', convertedMessages.length, 'messages from server');
+		return true;
+		
+	} catch (error) {
+		console.error('[Sync] Failed to sync thread from server:', error);
+		return false;
+	}
 }

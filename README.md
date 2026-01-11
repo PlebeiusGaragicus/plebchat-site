@@ -142,10 +142,21 @@ pytest
 
 ---
 
-### Generate a very insecure mnemonic:
+### Generate a wallet mnemonic
+
+```bash
+cd backend
+source venv/bin/activate
+python scripts/generate_mnemonic.py           # 12 words (default)
+python scripts/generate_mnemonic.py --24      # 24 words
+```
 
 ```sh
 cd /Users/satoshi/Downloads/plebchat-site/backend
 source venv/bin/activate
 python -c "from mnemonic import Mnemonic; print(Mnemonic('english').generate())"
 ```
+
+---
+
+`https://testnut.cashu.space`

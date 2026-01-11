@@ -63,7 +63,7 @@ class CashuServiceError(Exception):
 
 
 # Default configuration
-DEFAULT_MINT_URL = "https://mint.minibits.cash/Bitcoin"
+DEFAULT_MINT_URL = "https://testnut.cashu.space"
 DEFAULT_PAYOUT_THRESHOLD_SATS = 1000
 DEFAULT_PAYOUT_INTERVAL_SECONDS = 300  # 5 minutes
 

@@ -80,15 +80,74 @@ Guidelines:
 
 
 # =============================================================================
-# MODEL CREATION
+# LLM PROVIDER CONFIGURATION
 # =============================================================================
+
+# Supported LLM providers
+LLM_PROVIDER_PLEBCHAT = "plebchat"  # OpenAI-compatible endpoint
+LLM_PROVIDER_GROK = "grok"  # xAI Grok API
+
+# Get the configured provider (default to plebchat for backwards compatibility)
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", LLM_PROVIDER_PLEBCHAT).lower()
+
+# xAI Grok API configuration
+XAI_API_BASE_URL = "https://api.x.ai/v1"
+XAI_DEFAULT_MODEL = "grok-4-fast-non-thinking"
 
 
 def create_model():
-    """Create the LLM model using OpenAI-compatible endpoint.
+    """Create the LLM model based on the configured provider.
 
-    Requires explicit configuration - does NOT default to OpenAI.
+    Supports two providers:
+    - plebchat: OpenAI-compatible endpoint (Ollama, vLLM, LM Studio, etc.)
+    - grok: xAI Grok API (grok-4-fast-non-thinking)
+
+    Set LLM_PROVIDER environment variable to switch between them.
+    """
+    provider = LLM_PROVIDER
+
+    if provider == LLM_PROVIDER_GROK:
+        return _create_grok_model()
+    elif provider == LLM_PROVIDER_PLEBCHAT:
+        return _create_plebchat_model()
+    else:
+        raise ValueError(
+            f"Unknown LLM_PROVIDER: {provider}. "
+            f"Supported providers: {LLM_PROVIDER_PLEBCHAT}, {LLM_PROVIDER_GROK}"
+        )
+
+
+def _create_grok_model():
+    """Create xAI Grok model.
+
+    Uses the xAI API at https://api.x.ai/v1 with grok-4-fast-non-thinking.
+    Requires XAI_API_KEY environment variable.
+    """
+    api_key = os.getenv("XAI_API_KEY")
+    model_name = os.getenv("XAI_DEFAULT_MODEL", XAI_DEFAULT_MODEL)
+
+    if not api_key:
+        raise ValueError(
+            "XAI_API_KEY environment variable is required for Grok provider. "
+            "Get your API key from https://console.x.ai/"
+        )
+
+    print(f"[LLM] Using Grok provider: {model_name}")
+
+    return ChatOpenAI(
+        base_url=XAI_API_BASE_URL,
+        api_key=api_key,
+        model=model_name,
+        temperature=0.7,
+        streaming=True,
+    )
+
+
+def _create_plebchat_model():
+    """Create PlebChat model using OpenAI-compatible endpoint.
+
     Works with any OpenAI-compatible API (Ollama, vLLM, LM Studio, etc.)
+    Requires LLM_BASE_URL and LLM_MODEL environment variables.
     """
     base_url = os.getenv("LLM_BASE_URL")
     api_key = os.getenv("LLM_API_KEY")
@@ -96,15 +155,17 @@ def create_model():
 
     if not base_url:
         raise ValueError(
-            "LLM_BASE_URL environment variable is required. "
+            "LLM_BASE_URL environment variable is required for PlebChat provider. "
             "Set it to your OpenAI-compatible endpoint (e.g., http://localhost:11434/v1 for Ollama)"
         )
 
     if not model_name:
         raise ValueError(
-            "LLM_MODEL environment variable is required. "
+            "LLM_MODEL environment variable is required for PlebChat provider. "
             "Set it to your model name (e.g., llama3.2, mistral, etc.)"
         )
+
+    print(f"[LLM] Using PlebChat provider: {model_name} at {base_url}")
 
     return ChatOpenAI(
         base_url=base_url,
@@ -118,11 +179,6 @@ def create_model():
 # =============================================================================
 # PRICING CONFIGURATION
 # =============================================================================
-
-# Debug/Testing mode - when enabled, all prompts cost 1 sat
-# Set via PLEBCHAT_DEBUG_MODE environment variable
-DEBUG_MODE = os.getenv("PLEBCHAT_DEBUG_MODE", "true").lower() in ("true", "1", "yes")
-DEBUG_MODE_COST = 1  # Cost per prompt in debug mode
 
 # Agent pricing in sats (from docs/index.md)
 AGENT_PRICING = {
@@ -140,8 +196,6 @@ DEFAULT_PRICING = {"first": 50, "additional": 10}
 def get_required_amount(agent_id: str = "plebchat", is_first_message: bool = True) -> int:
     """Get the required payment amount for an agent.
     
-    In DEBUG_MODE, all prompts cost 1 sat for testing.
-    
     Args:
         agent_id: The agent identifier
         is_first_message: Whether this is the first message in a conversation
@@ -149,8 +203,6 @@ def get_required_amount(agent_id: str = "plebchat", is_first_message: bool = Tru
     Returns:
         Required amount in sats
     """
-    if DEBUG_MODE:
-        return DEBUG_MODE_COST
     pricing = AGENT_PRICING.get(agent_id, DEFAULT_PRICING)
     return pricing["first"] if is_first_message else pricing["additional"]
 
@@ -314,11 +366,7 @@ async def validate_payment_node(state: AgentState, config: RunnableConfig) -> di
             "run_id": run_id,
         }
     
-    # Log pricing mode
-    if DEBUG_MODE:
-        print(f"[Payment] DEBUG_MODE enabled - requiring only {required_amount} sat")
-    else:
-        print(f"[Payment] Production pricing - requiring {required_amount} sats")
+    print(f"[Payment] Requiring {required_amount} sats for agent '{agent_id}'")
 
     print("[Payment] ========== RECEIVED TOKEN (for recovery) ==========")
     print(f"[Payment] {token}")
