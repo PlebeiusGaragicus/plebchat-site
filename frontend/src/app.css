@@ -1,0 +1,282 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+/* ============================================
+   PlebChat Design System
+   Ultra-dark with purple & orange accents
+   High contrast UI elements
+   ============================================ */
+
+@theme {
+	/* Colors - Ultra Dark Theme */
+	--color-bg-primary: #030305;
+	--color-bg-secondary: #08080c;
+	--color-bg-tertiary: #0e0e14;
+	--color-bg-elevated: #16161e;
+	
+	/* Accent colors - Purple & Orange */
+	--color-accent-primary: #f97316;
+	--color-accent-dim: #ea580c;
+	--color-purple-accent: #a855f7;
+	--color-purple-dim: #7c3aed;
+	--color-green-success: #22c55e;
+	--color-amber-warning: #fbbf24;
+	--color-red-error: #ef4444;
+	
+	/* Code colors - natural syntax highlighting feel */
+	--color-code-text: #e2e8f0;
+	--color-code-keyword: #c084fc;
+	--color-code-string: #86efac;
+	--color-code-number: #fdba74;
+	
+	/* Text colors - high contrast */
+	--color-text-primary: #ffffff;
+	--color-text-secondary: #b4b4bc;
+	--color-text-muted: #6b6b78;
+	
+	/* Border colors - brighter for high contrast */
+	--color-border-default: #2a2a38;
+	--color-border-hover: #3d3d50;
+	--color-border-bright: #4a4a60;
+	--color-border-glow: #f97316;
+	
+	/* Shadows */
+	--shadow-glow-sm: 0 0 10px rgba(249, 115, 22, 0.25);
+	--shadow-glow-md: 0 0 20px rgba(249, 115, 22, 0.35);
+	--shadow-glow-lg: 0 0 40px rgba(249, 115, 22, 0.45);
+	--shadow-purple-sm: 0 0 10px rgba(168, 85, 247, 0.25);
+	--shadow-purple-md: 0 0 20px rgba(168, 85, 247, 0.35);
+	
+	/* Font */
+	--font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, monospace;
+	--font-sans: 'Inter', 'SF Pro Display', system-ui, sans-serif;
+
+	/* Legacy aliases for backward compatibility */
+	--color-cyan-glow: var(--color-accent-primary);
+	--color-cyan-dim: var(--color-accent-dim);
+}
+
+/* Base styles - prevent page-level scrolling and rubber-banding */
+html,
+body {
+	height: 100%;
+	overflow: hidden;
+	overscroll-behavior: none;
+	-webkit-overflow-scrolling: auto;
+}
+
+html {
+	background-color: var(--color-bg-primary);
+	color: var(--color-text-primary);
+	font-family: var(--font-sans);
+}
+
+body {
+	background: 
+		radial-gradient(ellipse at 15% 0%, rgba(168, 85, 247, 0.05) 0%, transparent 40%),
+		radial-gradient(ellipse at 85% 100%, rgba(249, 115, 22, 0.03) 0%, transparent 40%),
+		var(--color-bg-primary);
+}
+
+/* App shell - full viewport with internal scrolling */
+#app-shell {
+	height: 100vh;
+	height: 100dvh;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+/* Digital/Binary background pattern */
+.bg-digital {
+	position: relative;
+}
+
+.bg-digital::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background-image: 
+		repeating-linear-gradient(
+			0deg,
+			transparent,
+			transparent 60px,
+			rgba(168, 85, 247, 0.012) 60px,
+			rgba(168, 85, 247, 0.012) 61px
+		),
+		repeating-linear-gradient(
+			90deg,
+			transparent,
+			transparent 60px,
+			rgba(249, 115, 22, 0.008) 60px,
+			rgba(249, 115, 22, 0.008) 61px
+		);
+	pointer-events: none;
+	z-index: 0;
+}
+
+/* Glowing input effect */
+.glow-input {
+	position: relative;
+	border: 1px solid var(--color-border-hover);
+	background: var(--color-bg-secondary);
+	border-radius: 0.75rem;
+	transition: all 0.3s ease;
+}
+
+.glow-input:focus-within {
+	border-color: var(--color-border-bright);
+	box-shadow: var(--shadow-glow-sm);
+}
+
+.glow-input::before {
+	content: '';
+	position: absolute;
+	inset: -2px;
+	border-radius: 0.875rem;
+	background: linear-gradient(45deg, var(--color-accent-primary), var(--color-purple-accent), var(--color-accent-primary));
+	opacity: 0;
+	z-index: -1;
+	animation: glow-pulse 3s ease-in-out infinite;
+	transition: opacity 0.3s ease;
+}
+
+.glow-input:focus-within::before {
+	opacity: 0.3;
+}
+
+@keyframes glow-pulse {
+	0%, 100% { opacity: 0.15; }
+	50% { opacity: 0.35; }
+}
+
+/* Animated border for active elements */
+@keyframes border-flow {
+	0% { background-position: 0% 50%; }
+	50% { background-position: 100% 50%; }
+	100% { background-position: 0% 50%; }
+}
+
+.animated-border {
+	background: linear-gradient(90deg, var(--color-accent-primary), var(--color-purple-accent), var(--color-accent-primary));
+	background-size: 200% 200%;
+	animation: border-flow 3s ease infinite;
+}
+
+/* Scrollbar styling - brighter for visibility */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: var(--color-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--color-border-hover);
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--color-border-bright);
+}
+
+/* Selection styling */
+::selection {
+	background: rgba(168, 85, 247, 0.4);
+	color: var(--color-text-primary);
+}
+
+/* Link styling */
+a {
+	color: var(--color-accent-primary);
+	text-decoration: none;
+	transition: color 0.2s ease;
+}
+
+a:hover {
+	color: #fb923c;
+}
+
+/* Code styling - natural colors, not accent */
+code {
+	font-family: var(--font-mono);
+	background: var(--color-bg-tertiary);
+	padding: 0.125rem 0.5rem;
+	border-radius: 0.25rem;
+	font-size: 0.875em;
+	color: var(--color-code-text);
+	border: 1px solid var(--color-border-hover);
+}
+
+pre {
+	font-family: var(--font-mono);
+	background: var(--color-bg-tertiary);
+	padding: 1rem;
+	border-radius: 0.5rem;
+	overflow-x: auto;
+	border: 1px solid var(--color-border-hover);
+}
+
+pre code {
+	background: transparent;
+	border: none;
+	padding: 0;
+	color: var(--color-code-text);
+}
+
+/* Button base styles */
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	padding: 0.5rem 1rem;
+	border-radius: 0.5rem;
+	font-weight: 500;
+	transition: all 0.2s ease;
+	cursor: pointer;
+	border: none;
+}
+
+.btn-primary {
+	background: linear-gradient(135deg, var(--color-accent-primary), var(--color-accent-dim));
+	color: #000;
+}
+
+.btn-primary:hover {
+	box-shadow: var(--shadow-glow-sm);
+	transform: translateY(-1px);
+}
+
+.btn-ghost {
+	background: transparent;
+	color: var(--color-text-secondary);
+	border: 1px solid var(--color-border-hover);
+}
+
+.btn-ghost:hover {
+	background: var(--color-bg-elevated);
+	border-color: var(--color-border-bright);
+	color: var(--color-text-primary);
+}
+
+/* Fade in animation */
+@keyframes fade-in {
+	from { opacity: 0; transform: translateY(10px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+	animation: fade-in 0.3s ease forwards;
+}
+
+/* Mouse trail canvas styles */
+#mouse-trail-canvas {
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	z-index: 9999;
+	opacity: 0.6;
+}

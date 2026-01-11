@@ -1,5 +1,6 @@
 __pycache__/
 venv/
+*.egg-info/
 
 node_modules/
 
@@ -9,5 +10,7 @@ reference/
 
 .DS_Store
 .env
+*.sqlite3
+*.jsonl
 
 traces/*

@@ -1,7 +1,7 @@
 [project]
-name = "reader-agent"
+name = "plebchat-agent"
 version = "0.0.1"
-description = "LangGraph agent for SvelteReader AI chat assistant"
+description = "PlebChat LangGraph agent for AI chat with ecash payments"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"

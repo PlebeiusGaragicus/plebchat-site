@@ -1,0 +1,16 @@
+# PlebChat Backend Dependencies
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+httpx>=0.25.0
+python-dotenv>=1.0.0
+pydantic>=1.10.0  # cashu requires pydantic v1
+marshmallow>=3.13,<4.0
+cashu>=0.18.0  # Full Cashu wallet with proof swapping
+bech32>=1.2.0  # npub/hex conversion for NIP-98
+secp256k1>=0.14.0  # Schnorr signature verification
+loguru>=0.7.0  # Logging
+
+# Development
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
+ruff>=0.7.0
