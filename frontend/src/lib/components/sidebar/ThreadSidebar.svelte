@@ -60,8 +60,8 @@
 	</div>
 {/snippet}
 
-<!-- Mobile: Drawer from vaul-svelte -->
-{#if sidebar.isMobile}
+<!-- Mobile: Drawer from vaul-svelte (always rendered, CSS controls visibility) -->
+<div class="md:hidden">
 	<Drawer.Root
 		direction="left"
 		open={sidebar.mobileOpen}
@@ -81,9 +81,9 @@
 
 	<!-- Mobile toggle button -->
 	<button
-		onclick={() => sidebar.toggle()}
+		onclick={() => sidebar.open()}
 		class={cn(
-			'md:hidden fixed left-4 top-[4.5rem] z-30 p-2 rounded-lg transition-all',
+			'fixed left-4 top-[4.5rem] z-30 p-2 rounded-lg transition-all',
 			'bg-[var(--color-bg-secondary)] border border-[var(--color-border-hover)]',
 			'hover:bg-[var(--color-bg-elevated)] hover:border-[var(--color-border-bright)]',
 			'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
@@ -92,36 +92,36 @@
 	>
 		<PanelLeft class="w-5 h-5" />
 	</button>
-{:else}
-	<!-- Desktop: Fixed sidebar panel -->
-	<aside
-		class={cn(
-			'hidden md:flex fixed left-0 top-14 bottom-0 z-30',
-			'w-72 flex-col',
-			'bg-[var(--color-bg-secondary)] border-r border-[var(--color-border-hover)]',
-			'transition-transform duration-200 ease-in-out',
-			sidebar.desktopOpen ? 'translate-x-0' : '-translate-x-full'
-		)}
-	>
-		{@render sidebarContent()}
-	</aside>
+</div>
 
-	<!-- Desktop toggle button -->
-	<button
-		onclick={() => sidebar.toggle()}
-		class={cn(
-			'hidden md:flex fixed top-20 z-40 p-2 rounded-lg transition-all',
-			'bg-[var(--color-bg-secondary)] border border-[var(--color-border-hover)]',
-			'hover:bg-[var(--color-bg-elevated)] hover:border-[var(--color-border-bright)]',
-			'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]',
-			sidebar.desktopOpen ? 'left-[276px]' : 'left-4'
-		)}
-		title={sidebar.desktopOpen ? 'Close sidebar (⌘B)' : 'Open sidebar (⌘B)'}
-	>
-		{#if sidebar.desktopOpen}
-			<PanelLeftClose class="w-5 h-5" />
-		{:else}
-			<PanelLeft class="w-5 h-5" />
-		{/if}
-	</button>
-{/if}
+<!-- Desktop: Fixed sidebar panel (always rendered, CSS controls visibility) -->
+<aside
+	class={cn(
+		'hidden md:flex fixed left-0 top-14 bottom-0 z-30',
+		'w-72 flex-col',
+		'bg-[var(--color-bg-secondary)] border-r border-[var(--color-border-hover)]',
+		'transition-transform duration-200 ease-in-out',
+		sidebar.desktopOpen ? 'translate-x-0' : '-translate-x-full'
+	)}
+>
+	{@render sidebarContent()}
+</aside>
+
+<!-- Desktop toggle button -->
+<button
+	onclick={() => sidebar.toggle()}
+	class={cn(
+		'hidden md:flex fixed top-20 z-40 p-2 rounded-lg transition-all',
+		'bg-[var(--color-bg-secondary)] border border-[var(--color-border-hover)]',
+		'hover:bg-[var(--color-bg-elevated)] hover:border-[var(--color-border-bright)]',
+		'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]',
+		sidebar.desktopOpen ? 'left-[276px]' : 'left-4'
+	)}
+	title={sidebar.desktopOpen ? 'Close sidebar (⌘B)' : 'Open sidebar (⌘B)'}
+>
+	{#if sidebar.desktopOpen}
+		<PanelLeftClose class="w-5 h-5" />
+	{:else}
+		<PanelLeft class="w-5 h-5" />
+	{/if}
+</button>

@@ -75,6 +75,19 @@
 | Lucide Svelte | 0.515.0 | Icon library |
 | Svelte Sonner | 1.0.5 | Toast notifications |
 
+### Build Configuration
+
+The frontend is a **pure client-side SPA** with no server-side rendering:
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| Adapter | `@sveltejs/adapter-static` | Generates static files only |
+| SSR | `false` | All rendering happens in browser |
+| Prerender | `true` | Generates HTML shell at build time |
+| Fallback | `index.html` | All routes serve the same shell |
+
+**Build output:** Static files in `build/` directory, deployable to any static host (Nginx, S3, Cloudflare Pages, GitHub Pages, etc.).
+
 ---
 
 ## Application Flow
@@ -157,15 +170,17 @@ Subsequent: agent.additionalCost (e.g., 10 sats)
 
 #### ChatInput
 
-Message input with payment cost display.
+Floating message input with payment cost display.
 
 **Features:**
+- Floating oval design positioned over chat area
+- Glassmorphism effect (backdrop blur, semi-transparent)
 - Auto-expanding textarea (max 150px height)
 - Smart Enter handling (Enter sends, Shift+Enter newline)
-- Cost indicator badge (top-right corner)
-- Low balance warning (amber color when insufficient)
-- Settings button placeholder
-- Send button with loading state
+- Centered cost indicator pill (floats above input)
+- Centered low balance warning pill (amber color when insufficient)
+- Settings button (circular, opens agent configuration)
+- Send button (circular with hover scale, glow effects)
 - Disabled states for: no agent, insufficient balance, streaming
 
 #### ChatMessage
@@ -174,15 +189,17 @@ Individual message display with type differentiation.
 
 **Message Types:**
 
-| Type | Avatar Color | Label |
-|------|--------------|-------|
-| human | Purple (#8b5cf6) | "You" |
-| ai | Cyan (#00d4ff) | Agent emoji + "AI" |
-| tool | Gray (#64748b) | Tool name |
+| Type | Avatar Color | Bubble Background | Label |
+|------|--------------|-------------------|-------|
+| human | Purple (`#7c3aed`) | Purple tint (`purple-dim/20`) | "You" |
+| ai | Orange gradient | Elevated (`bg-elevated`) | "PlebChat" |
+| tool | Gray | - | Tool name |
 
 **Features:**
+- Transparent row backgrounds (no visible boxes when mouse effect passes)
 - Streaming cursor animation for empty AI messages
 - Tool call expansion via ToolCallDisplay
+- Copy button on hover
 - Pre-wrap text formatting
 - Responsive sizing
 
@@ -227,8 +244,9 @@ Dropdown menu for agent selection.
 Collapsible sidebar for chat history management.
 
 **Features:**
-- Desktop: Toggle button on left edge
-- Mobile: Full-screen overlay with backdrop
+- CSS-based responsive rendering (both mobile and desktop markup always rendered)
+- Desktop (`md:` and up): Fixed sidebar panel with toggle button
+- Mobile (below `md:`): Drawer overlay (vaul-svelte) with backdrop
 - "New Chat" button
 - Thread list with:
   - Title (first 50 chars of first message)
@@ -243,11 +261,11 @@ Collapsible sidebar for chat history management.
 Visual effect that follows mouse movement.
 
 **Features:**
-- Radial gradient glow (cyan to purple)
-- 600x600px blur effect
-- Smooth interpolation (0.08 factor)
-- RequestAnimationFrame performance
-- SSR-safe (browser check)
+- Radial gradient glow (orange to purple, matching theme)
+- 500x500px blur effect with 50px filter
+- Fast CSS transition (60ms) for responsive tracking
+- Svelte 5 `$state` reactivity for position updates
+- Opacity: 18% orange core, 12% purple fade
 
 ---
 
@@ -413,30 +431,34 @@ When `DEBUG_MODE` is enabled (via `VITE_DEBUG=1` in `.env.development`):
 
 | Variable | Value | Usage |
 |----------|-------|-------|
-| `--color-bg-primary` | `#0a0f1c` | Main background |
-| `--color-bg-secondary` | `#0d1424` | Secondary surfaces |
-| `--color-bg-tertiary` | `#111827` | Tertiary surfaces |
-| `--color-bg-elevated` | `#1a2436` | Cards, modals |
-| `--color-accent-cyan` | `#00d4ff` | Primary accent (neon) |
-| `--color-accent-purple` | `#8b5cf6` | Secondary accent |
-| `--color-success` | `#10b981` | Success states |
-| `--color-warning` | `#f59e0b` | Warning states |
-| `--color-error` | `#ef4444` | Error states |
-| `--color-text-primary` | `#f1f5f9` | Main text |
-| `--color-text-secondary` | `#94a3b8` | Secondary text |
-| `--color-text-muted` | `#64748b` | Muted text |
-| `--color-border` | `#1e293b` | Borders |
+| `--color-bg-primary` | `#030305` | Main background (ultra-dark) |
+| `--color-bg-secondary` | `#08080c` | Secondary surfaces |
+| `--color-bg-tertiary` | `#0e0e14` | Tertiary surfaces |
+| `--color-bg-elevated` | `#16161e` | Cards, modals |
+| `--color-accent-primary` | `#f97316` | Primary accent (orange) |
+| `--color-accent-dim` | `#ea580c` | Dimmed accent |
+| `--color-purple-accent` | `#a855f7` | Secondary accent (purple) |
+| `--color-purple-dim` | `#7c3aed` | Dimmed purple |
+| `--color-green-success` | `#22c55e` | Success states |
+| `--color-amber-warning` | `#fbbf24` | Warning states |
+| `--color-red-error` | `#ef4444` | Error states |
+| `--color-text-primary` | `#ffffff` | Main text |
+| `--color-text-secondary` | `#b4b4bc` | Secondary text |
+| `--color-text-muted` | `#6b6b78` | Muted text |
+| `--color-border-default` | `#2a2a38` | Default borders |
+| `--color-border-hover` | `#3d3d50` | Hover borders |
+| `--color-border-bright` | `#4a4a60` | Bright borders |
 
 ### Custom CSS Features
 
 | Class/Animation | Purpose |
 |-----------------|---------|
-| `.bg-digital` | Grid pattern background |
+| `.bg-digital` | Grid pattern background (purple/orange subtle lines) |
 | `.glow-input` | Animated border glow on focus |
 | `@keyframes glow-pulse` | 3s pulsing glow |
 | `@keyframes border-flow` | Flowing gradient animation |
 | `.animate-fade-in` | Entrance fade animation |
-| `.btn-primary` | Gradient cyan button |
+| `.btn-primary` | Gradient orange button |
 | `.btn-ghost` | Transparent ghost button |
 
 ### Typography
@@ -480,6 +502,7 @@ When `DEBUG_MODE` is enabled (via `VITE_DEBUG=1` in `.env.development`):
 frontend/src/
 ├── routes/
 │   ├── +layout.svelte      # Global layout (navbar, effects, toasts)
+│   ├── +layout.ts          # SPA config: ssr=false, prerender=true
 │   └── +page.svelte        # Main page (welcome or chat)
 ├── lib/
 │   ├── components/
@@ -499,6 +522,7 @@ frontend/src/
 │   ├── stores/
 │   │   ├── agent.ts
 │   │   ├── threads.ts
+│   │   ├── sidebar.svelte.ts
 │   │   └── stream.svelte.ts
 │   ├── assets/
 │   │   └── favicon.svg

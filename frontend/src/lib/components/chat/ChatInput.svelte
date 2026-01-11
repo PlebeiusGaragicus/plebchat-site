@@ -58,20 +58,26 @@
 <form onsubmit={handleSubmit} class="relative">
 	<!-- Low balance warning -->
 	{#if hasInsufficientBalance}
-		<div class="absolute -top-10 sm:-top-12 left-0 right-0 flex items-center justify-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400">
+		<div class="absolute -top-12 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 bg-amber-500/15 border border-amber-500/40 rounded-full text-amber-400 backdrop-blur-sm whitespace-nowrap">
 			<AlertTriangle class="w-3.5 h-3.5 flex-shrink-0" />
 			<span class="text-[10px] sm:text-xs">
-				Low balance: you need <span class="font-semibold">{promptCost}</span> sats but only have <span class="font-semibold">{balance}</span> sats
+				Need <span class="font-semibold">{promptCost}</span> sats · have <span class="font-semibold">{balance}</span>
 			</span>
 		</div>
 	{/if}
 
-	<!-- Input container -->
+	<!-- Floating input container -->
 	<div class={cn(
-		"glow-input rounded-full sm:rounded-[2rem] p-1 sm:p-1.5 overflow-hidden",
-		hasInsufficientBalance && "border-amber-500/50"
+		"relative rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden",
+		"bg-[var(--color-bg-secondary)]/90 backdrop-blur-xl",
+		"border border-[var(--color-border-hover)]",
+		"shadow-[0_8px_32px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,255,255,0.03)_inset]",
+		"transition-all duration-300",
+		"hover:border-[var(--color-border-bright)] hover:shadow-[0_8px_40px_rgba(0,0,0,0.5),0_0_20px_rgba(249,115,22,0.08)]",
+		"focus-within:border-[var(--color-accent-primary)]/50 focus-within:shadow-[0_8px_40px_rgba(0,0,0,0.5),0_0_30px_rgba(249,115,22,0.15)]",
+		hasInsufficientBalance && "border-amber-500/40"
 	)}>
-		<div class="flex items-end gap-1 sm:gap-2">
+		<div class="flex items-center">
 			<!-- Text input area -->
 			<textarea
 				bind:this={textareaRef}
@@ -82,58 +88,61 @@
 				disabled={disabled || !$selectedAgent}
 				rows={1}
 				class={cn(
-					"flex-1 resize-none bg-transparent px-3 sm:px-5 py-3 sm:py-4 text-sm sm:text-base text-[var(--color-text-primary)]",
+					"flex-1 resize-none bg-transparent",
+					"pl-5 sm:pl-7 pr-2 py-4 sm:py-5",
+					"text-sm sm:text-base text-[var(--color-text-primary)]",
 					"placeholder:text-[var(--color-text-muted)]",
 					"focus:outline-none focus:ring-0",
 					"disabled:opacity-50 disabled:cursor-not-allowed",
-					"max-h-[150px] min-h-[48px] sm:min-h-[56px]"
+					"max-h-[150px] min-h-[52px] sm:min-h-[60px]"
 				)}
 			></textarea>
 
-			<!-- Action buttons -->
-			<div class="flex items-center gap-1 pb-2 sm:pb-3 pr-2 sm:pr-3 flex-shrink-0">
-				<!-- Settings button - always visible -->
+			<!-- Action buttons - vertically centered -->
+			<div class="flex items-center gap-1.5 sm:gap-2 pr-2 sm:pr-3 flex-shrink-0">
+				<!-- Settings button -->
 				{#if $selectedAgent && onOpenSettings}
 					<button
 						type="button"
 						onclick={onOpenSettings}
 						class={cn(
-							"flex p-2 rounded-full transition-colors",
+							"flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full transition-all",
 							"text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]",
-							"hover:bg-[var(--color-bg-elevated)]"
+							"hover:bg-[var(--color-bg-elevated)]/80"
 						)}
 						title="Agent settings"
 					>
-						<Settings class="w-4 h-4 sm:w-5 sm:h-5" />
+						<Settings class="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
 					</button>
 				{/if}
 
-				<!-- Send button -->
+				<!-- Send button - perfectly circular -->
 				<button
 					type="submit"
 					disabled={!message.trim() || isLoading || disabled || !$selectedAgent || hasInsufficientBalance}
 					class={cn(
-						"p-2 sm:p-3 rounded-full transition-all",
-						"bg-gradient-to-r from-[var(--color-accent-primary)] to-[var(--color-accent-dim)]",
-						"text-black font-medium",
-						"hover:shadow-[var(--shadow-glow-sm)]",
-						"disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+						"flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full transition-all duration-200",
+						"bg-gradient-to-br from-[var(--color-accent-primary)] via-[var(--color-accent-primary)] to-[var(--color-accent-dim)]",
+						"text-black",
+						"hover:scale-105 hover:shadow-[0_0_20px_rgba(249,115,22,0.5)]",
+						"active:scale-95",
+						"disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none"
 					)}
 				>
 					{#if isLoading}
 						<Loader2 class="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
 					{:else}
-						<Send class="w-4 h-4 sm:w-5 sm:h-5" />
+						<Send class="w-4 h-4 sm:w-5 sm:h-5 translate-x-[1px]" />
 					{/if}
 				</button>
 			</div>
 		</div>
 	</div>
 
-	<!-- Cost indicator (only show when not showing low balance warning) -->
+	<!-- Cost indicator floating above -->
 	{#if $selectedAgent && message.trim() && !hasInsufficientBalance}
-		<div class="absolute -top-6 sm:-top-8 right-2 sm:right-0 text-[10px] sm:text-xs text-[var(--color-text-muted)]">
-			<span class="text-[var(--color-accent-primary)]">{promptCost}</span> sats
+		<div class="absolute -top-8 left-1/2 -translate-x-1/2 text-[10px] sm:text-xs text-[var(--color-text-muted)] bg-[var(--color-bg-tertiary)]/80 backdrop-blur-sm px-3 py-1 rounded-full border border-[var(--color-border-default)]">
+			<span class="text-[var(--color-accent-primary)] font-medium">{promptCost}</span> sats
 		</div>
 	{/if}
 </form>

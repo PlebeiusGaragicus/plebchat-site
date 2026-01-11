@@ -21,8 +21,8 @@
 	<div
 		class={cn(
 			'transition-[margin-left] duration-200 ease-in-out',
-			// On desktop, add left margin when sidebar is open
-			!sidebar.isMobile && sidebar.desktopOpen && 'md:ml-72'
+			// On desktop, add left margin when sidebar is open (md: prefix handles mobile)
+			sidebar.desktopOpen && 'md:ml-72'
 		)}
 	>
 		<ChatContainer />

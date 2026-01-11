@@ -28,8 +28,7 @@
 <div
 	class={cn(
 		'group flex gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4 animate-fade-in',
-		message.type === 'human' && 'flex-row-reverse bg-transparent',
-		message.type === 'ai' && 'bg-[var(--color-bg-secondary)]/50'
+		message.type === 'human' && 'flex-row-reverse'
 	)}
 >
 	<!-- Avatar -->

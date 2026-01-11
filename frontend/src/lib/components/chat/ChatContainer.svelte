@@ -182,9 +182,9 @@
 </script>
 
 <!-- Main content area - sidebar overlays this, doesn't push it -->
-<div class="flex flex-col h-[calc(100vh-3.5rem)] h-[calc(100dvh-3.5rem)]">
+<div class="relative h-[calc(100vh-3.5rem)] h-[calc(100dvh-3.5rem)]">
 	<!-- Messages area -->
-	<div bind:this={messagesContainer} class="flex-1 overflow-y-auto overscroll-contain">
+	<div bind:this={messagesContainer} class="h-full overflow-y-auto overscroll-contain pb-28 sm:pb-32">
 		{#if !$currentThread || $currentThread.messages.length === 0}
 			<!-- Empty state -->
 			<div class="h-full flex items-center justify-center px-4">
@@ -235,11 +235,9 @@
 		{/if}
 	</div>
 
-	<!-- Input area -->
-	<div
-		class="border-t border-[var(--color-border-default)] bg-[var(--color-bg-primary)]/80 backdrop-blur-sm"
-	>
-		<div class="max-w-4xl mx-auto p-3 sm:p-4">
+	<!-- Floating input area -->
+	<div class="absolute bottom-4 sm:bottom-6 left-4 right-4 sm:left-8 sm:right-8 z-20">
+		<div class="max-w-3xl mx-auto">
 			<ChatInput
 				onSubmit={handleSubmit}
 				isLoading={streamState.isLoading}
@@ -249,7 +247,7 @@
 			/>
 
 			{#if !cyphertap.isLoggedIn}
-				<p class="mt-2 text-[10px] sm:text-xs text-center text-[var(--color-text-muted)]">
+				<p class="mt-3 text-[10px] sm:text-xs text-center text-[var(--color-text-muted)]">
 					Log in with your wallet to start chatting
 				</p>
 			{/if}

@@ -8,7 +8,7 @@
 
 **PlebChat** is a simple AI chat web application that demonstrates:
 
- - A Svelte 5 client-side UI in `frontend/` with a "CypherTap" library used to handle user login, bitcoin ecash wallet and micropayments for pay-per-use AI usage.
+ - A Svelte 5 client-side SPA in `frontend/` (no server-side rendering) with a "CypherTap" library used to handle user login, bitcoin ecash wallet and micropayments for pay-per-use AI usage. Builds to static files deployable on any static host.
  - A Python3.12 FastAPI `backend/` used to validate and redeem ecash tokens
  - LangGraph `agents/` are simple LLM graphs that verify ecash before execution.
 

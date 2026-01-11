@@ -79,7 +79,7 @@
 	</section>
 
 	<!-- Features Grid -->
-	<section class="px-4 py-8 sm:py-16 bg-[var(--color-bg-secondary)]/30">
+	<section class="px-4 py-8 sm:py-16">
 		<div class="max-w-5xl mx-auto">
 			<h2
 				class="text-xl sm:text-2xl font-bold text-center text-[var(--color-text-primary)] mb-8 sm:mb-12"
